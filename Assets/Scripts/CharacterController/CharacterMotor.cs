@@ -9,42 +9,66 @@ using System;
 [RequireComponent(typeof(Rigidbody))]
 public class CharacterMotor : MonoBehaviour
 {
+    [Header("Movement")]
     [SerializeField] float _maxSpeed = .1f;
-    [SerializeField] float _accelZeroToMax = 1f;
-    [SerializeField] float _decelMaxToZero = 1f;
+    public float MaxSpeed
+    {
+        get => _maxSpeed;
+        private set => _maxSpeed = value;
+    }
+    [SerializeField] float _accelToMaxInSec = 1f;
+    [SerializeField] float _decelToZeroInSec = 1f;
 
+    [Header("Rotation")]
     [SerializeField] float _turnSpeed = .1f;
 
+    [Header("Jumping")]
     [SerializeField] float _jumpForce = 100;
-
     [SerializeField] float _groundCheckRadius = .15f;
     [SerializeField] LayerMask _groundLayers;
 
-    public event Action<float> SpeedChange = delegate { };
+    public event Action<Vector2> MovementChanged = delegate { };
+    public event Action<float> SpeedChanged = delegate { };
     public event Action Jumped = delegate { };
     public event Action Landed = delegate { };
     public event Action StartedFalling = delegate { };
     public event Action KnockedBack = delegate { };
 
-    public float CurrentSpeed { get; private set; } = 0;    // speed accounting for acceleration
+    // speed accounting for acceleration
+    float _currentSpeed;
+    public float CurrentSpeed 
+    {
+        get => _currentSpeed;
+        private set
+        {
+            if(value != _currentSpeed)
+            {
+                SpeedChanged.Invoke(value);
+            }
+            _currentSpeed = value;
+        }
+    }
+    public float CurrentSpeedNormalized
+    {
+        get => (1 / MaxSpeed) * _currentSpeed;
+    }
     public bool IsFalling { get; private set; } = true;    // falling is defined as 'after the apex of the jump'
     public bool IsGrounded { get; private set; } = true;
 
     public float AccelRatePerSecond
     {
-        get { return _maxSpeed / _accelZeroToMax; }
+        get { return _maxSpeed / _accelToMaxInSec; }
     }
     public float DecelRatePerSecond
     {
-        get { return _maxSpeed / _decelMaxToZero; }
+        get { return _maxSpeed / _decelToZeroInSec; }
     }
 
     Rigidbody _rb;
 
-    Vector3 _currentVelocity;
-    Vector3 _moveDirectionThisFrame = Vector3.zero;
+    Vector2 _movement;
+    Vector3 _newMovementThisFrame = Vector3.zero;
     Quaternion _rotationThisFrame;
-
 
     #region MonoBehaviour
     private void Awake()
@@ -60,25 +84,30 @@ public class CharacterMotor : MonoBehaviour
         
         ApplyAcceleration();
 
-        if(_moveDirectionThisFrame != Vector3.zero)
+        if(_newMovementThisFrame != Vector3.zero)
         {
-            ApplyMovement(_moveDirectionThisFrame);
+            ApplyMovement(_newMovementThisFrame);
+            //TODO add to Vector
         }
         else
         {
             ApplyMovement(transform.forward);
+            //TODO subtract from Vector
         }
 
         ApplyRotation(_rotationThisFrame);
 
-        _moveDirectionThisFrame = Vector3.zero;
+        _newMovementThisFrame = Vector3.zero;
+
+        //TODO actually call this when something moved, not every fixedUpdate
+        MovementChanged.Invoke(_movement);
     }
     #endregion
 
-    #region public
+    #region Public
     public void Move(Vector3 moveDirection)
     {
-        _moveDirectionThisFrame = moveDirection;
+        _newMovementThisFrame = moveDirection;
     }
 
     public void Rotate(Vector3 moveDirection)
@@ -105,7 +134,7 @@ public class CharacterMotor : MonoBehaviour
 
     private void ApplyAcceleration()
     {
-        if (_moveDirectionThisFrame != Vector3.zero)
+        if (_newMovementThisFrame != Vector3.zero)
         {
             CurrentSpeed += AccelRatePerSecond * Time.fixedDeltaTime;
         }
@@ -115,8 +144,6 @@ public class CharacterMotor : MonoBehaviour
         }
         // don't go over the max speed
         CurrentSpeed = Mathf.Clamp(CurrentSpeed, 0, _maxSpeed);
-
-        Debug.Log("CurrentSpeed: " + CurrentSpeed);
     }
 
     void ApplyMovement(Vector3 movementThisFrame)

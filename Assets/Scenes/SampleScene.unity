@@ -702,9 +702,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 93245704b20521c4494b7993143732cb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _maxSpeed: 0.1
-  _accelZeroToMax: 0.4
-  _decelMaxToZero: 0.2
+  _maxSpeed: 0.15
+  _accelToMaxInSec: 0.5
+  _decelToZeroInSec: 0.3
   _turnSpeed: 0.15
   _jumpForce: 300
   _groundCheckRadius: 0.15
