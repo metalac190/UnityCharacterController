@@ -10,22 +10,22 @@ using System;
 public class CharacterMotor : MonoBehaviour
 {
     [Header("Movement")]
-    [SerializeField] float _maxSpeed = .1f;
+    [SerializeField] float _maxSpeed = .15f;
     public float MaxSpeed
     {
         get => _maxSpeed;
         private set => _maxSpeed = value;
     }
-    [SerializeField] float _accelToMaxInSec = 1f;
-    [SerializeField] float _decelToZeroInSec = 1f;
+    [SerializeField] float _accelToMaxInSec = .5f;
+    [SerializeField] float _decelToZeroInSec = .3f;
 
     [Header("Rotation")]
-    [SerializeField] float _turnSpeed = .1f;
+    [SerializeField] float _turnSpeed = .15f;
 
     [Header("Jumping")]
-    [SerializeField] float _jumpForce = 100;
-    [SerializeField] float _groundCheckRadius = .15f;
-    [SerializeField] LayerMask _groundLayers;
+    [SerializeField] float _jumpForce = 300;
+    [SerializeField] float _groundCheckRadius = .2f;
+    [SerializeField] LayerMask _groundTestLayers = -1;
 
     public event Action<Vector2> MovementChanged = delegate { };
     public event Action<float> SpeedChanged = delegate { };
@@ -64,16 +64,26 @@ public class CharacterMotor : MonoBehaviour
         get { return _maxSpeed / _decelToZeroInSec; }
     }
 
+    Collider _characterCollider;
     Rigidbody _rb;
 
     Vector2 _movement;
     Vector3 _newMovementThisFrame = Vector3.zero;
     Quaternion _rotationThisFrame;
+    bool _jumpThisFrame = false;
 
     #region MonoBehaviour
     private void Awake()
     {
+        _characterCollider = GetComponent<Collider>();
         _rb = GetComponent<Rigidbody>();
+    }
+
+    void Reset()
+    {
+        // disable player layer for default setup. 
+        int _playerLayer = 8;
+        _groundTestLayers = ~(1 << _playerLayer);
     }
 
     private void FixedUpdate()
@@ -97,6 +107,8 @@ public class CharacterMotor : MonoBehaviour
 
         ApplyRotation(_rotationThisFrame);
 
+        ApplyJump(_jumpThisFrame);
+
         _newMovementThisFrame = Vector3.zero;
 
         //TODO actually call this when something moved, not every fixedUpdate
@@ -117,11 +129,7 @@ public class CharacterMotor : MonoBehaviour
 
     public void Jump()
     {
-        if (IsGrounded)
-        {
-            _rb.AddForce(Vector3.up * _jumpForce);
-            Jumped.Invoke();
-        }
+        _jumpThisFrame = true;
     }
 
     public void KnockBack(Vector3 direction, float strength)
@@ -160,6 +168,17 @@ public class CharacterMotor : MonoBehaviour
         // don't reset it, so that we maintain current facing direction
     }
 
+    void ApplyJump(bool shouldJump)
+    {
+        if (IsGrounded && shouldJump == true)
+        {
+            _rb.AddForce(Vector3.up * _jumpForce);
+            Jumped.Invoke();
+        }
+        // reset it to false, so that we can receive a new jump command
+        _jumpThisFrame = false;
+    }
+
     void CheckIfFalling()
     {
         bool previouslyFalling = IsFalling;
@@ -183,27 +202,22 @@ public class CharacterMotor : MonoBehaviour
     {
         // store grounded before changing, so we can test for new grounded event
         bool previouslyGrounded = IsGrounded;
-
-        Collider[] groundColliders = Physics.OverlapSphere(transform.position, _groundCheckRadius, _groundLayers);
-        if(groundColliders.Length == 0)
-        {
-            //Debug.Log("Grounded! Collider: " + hitInfo.collider.gameObject.name);
-            IsGrounded = false;
-        }
-        else
+        // offset the ray slightly from the floor
+        Vector3 startLocation = new Vector3(transform.position.x, transform.position.y + .1f, transform.position.z);
+        Debug.DrawRay(transform.position, startLocation * .3f);
+        if(Physics.Raycast(startLocation, Vector3.down, .2f + .1f, _groundTestLayers))
         {
             // we are touching ground
             IsGrounded = true;
             // if we were falling, but have recently grounded, we have landed!
-            if(IsFalling)
+            if (IsFalling)
             {
                 Landed.Invoke();
             }
         }
-    }
-
-    private void OnDrawGizmosSelected()
-    {
-        Gizmos.DrawSphere(transform.position, _groundCheckRadius);
+        else
+        {
+            IsGrounded = false;
+        }
     }
 }

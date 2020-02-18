@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 
 [RequireComponent(typeof(CharacterMotor))]
-public class PlayerPawn : MonoBehaviour, IPawn
+public class ThirdPersonController : MonoBehaviour, IPawn
 {
     Vector2 _input;
     Vector3 _currentDirection;
