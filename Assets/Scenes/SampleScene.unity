@@ -1057,7 +1057,8 @@ MonoBehaviour:
   _decelToZeroInSec: 0.3
   _turnSpeed: 0.15
   _jumpForce: 300
-  _groundCheckRadius: 0.2
+  _allowDoubleJump: 1
+  _doubleJumpForce: 250
   _groundTestLayers:
     serializedVersion: 2
     m_Bits: 4294967039

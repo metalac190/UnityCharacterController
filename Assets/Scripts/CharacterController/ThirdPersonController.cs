@@ -29,7 +29,7 @@ public class ThirdPersonController : MonoBehaviour, IPawn
         {
             return;
         }
-
+        //Debug.Log("Input: " + _input.x + " " + _input.y);
         // we need to convert our input into our intended direction.
         // in this case, we want to move relative to the camera, 
         Vector3 moveDirection = GetTargetDirection();

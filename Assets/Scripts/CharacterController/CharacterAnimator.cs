@@ -9,6 +9,7 @@ public class CharacterAnimator : MonoBehaviour
     const string XInputParam = "XInput";
     const string YInputParam = "YInput";
     const string SpeedParam = "Speed";
+
     const string JumpParam = "Jump";
     const string FallParam = "Fall";
     const string LandParam = "Land";
@@ -16,6 +17,8 @@ public class CharacterAnimator : MonoBehaviour
 
     CharacterMotor _motor = null;
     Animator _animator = null;
+
+    Coroutine _triggerTimer;
 
     private void Awake()
     {
@@ -57,19 +60,44 @@ public class CharacterAnimator : MonoBehaviour
 
     void OnLanded()
     {
-        _animator.SetTrigger(LandParam);
+        //_animator.ResetTrigger(JumpParam);
+        //_animator.ResetTrigger(FallParam);
+
+        //_animator.SetTrigger(LandParam);
+        SetTriggerQuick(LandParam);
         Debug.Log("Landed!");
     }
 
     void OnJumped()
     {
-        _animator.SetTrigger(JumpParam);
+        //_animator.ResetTrigger(LandParam);
+        //_animator.ResetTrigger(FallParam);
+
+        //_animator.SetTrigger(JumpParam);
+        SetTriggerQuick(JumpParam);
         Debug.Log("Jumped!");
     }
 
     void OnStartedFalling()
     {
-        _animator.SetTrigger(FallParam);
+        //_animator.ResetTrigger(LandParam);
+        //_animator.ResetTrigger(JumpParam);
+
+        //_animator.SetTrigger(FallParam);
+        SetTriggerQuick(FallParam);
         Debug.Log("Started Falling!");
+    }
+
+    // wrote this because Mecanim SetTrigger is the worst
+    void SetTriggerQuick(string triggerName)
+    {
+        _triggerTimer = StartCoroutine(SetTriggerQuickRoutine(triggerName));
+    }
+
+    IEnumerator SetTriggerQuickRoutine(string triggerName)
+    {
+        _animator.SetTrigger(triggerName);
+        yield return null;
+        _animator.ResetTrigger(triggerName);
     }
 }

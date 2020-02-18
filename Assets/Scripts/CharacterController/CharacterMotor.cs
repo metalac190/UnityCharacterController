@@ -24,8 +24,9 @@ public class CharacterMotor : MonoBehaviour
 
     [Header("Jumping")]
     [SerializeField] float _jumpForce = 300;
-    [SerializeField] float _groundCheckRadius = .2f;
-    [SerializeField] LayerMask _groundTestLayers = -1;
+    [SerializeField] bool _allowDoubleJump = true;
+    [SerializeField] float _doubleJumpForce = 150;
+    [SerializeField] LayerMask _groundTestLayers = -1;  // default to 'everything'
 
     public event Action<Vector2> MovementChanged = delegate { };
     public event Action<float> SpeedChanged = delegate { };
@@ -52,8 +53,6 @@ public class CharacterMotor : MonoBehaviour
     {
         get => (1 / MaxSpeed) * _currentSpeed;
     }
-    public bool IsFalling { get; private set; } = true;    // falling is defined as 'after the apex of the jump'
-    public bool IsGrounded { get; private set; } = true;
 
     public float AccelRatePerSecond
     {
@@ -64,18 +63,21 @@ public class CharacterMotor : MonoBehaviour
         get { return _maxSpeed / _decelToZeroInSec; }
     }
 
-    Collider _characterCollider;
+    public bool IsFalling { get; private set; } = true;    // falling is defined as 'after the apex of the jump'
+    public bool IsGrounded { get; private set; } = true;
+
     Rigidbody _rb;
 
     Vector2 _movement;
     Vector3 _newMovementThisFrame = Vector3.zero;
     Quaternion _rotationThisFrame;
+
+    bool _doubleJumpReady = true;
     bool _jumpThisFrame = false;
 
     #region MonoBehaviour
     private void Awake()
     {
-        _characterCollider = GetComponent<Collider>();
         _rb = GetComponent<Rigidbody>();
     }
 
@@ -88,8 +90,9 @@ public class CharacterMotor : MonoBehaviour
 
     private void FixedUpdate()
     {
-        CheckIfFalling();
         CheckIfGrounded();
+        CheckIfFalling();
+
         // Check if we just landed!
         
         ApplyAcceleration();
@@ -119,6 +122,7 @@ public class CharacterMotor : MonoBehaviour
     #region Public
     public void Move(Vector3 moveDirection)
     {
+        //Debug.Log("Move Direction: " + moveDirection);
         _newMovementThisFrame = moveDirection;
     }
 
@@ -170,10 +174,23 @@ public class CharacterMotor : MonoBehaviour
 
     void ApplyJump(bool shouldJump)
     {
+        // if we're on the ground, allow a jump
         if (IsGrounded && shouldJump == true)
         {
             _rb.AddForce(Vector3.up * _jumpForce);
             Jumped.Invoke();
+        }
+        // if we're in the air, capable of double jump, and have received jump command, allow double jump
+        else
+        {
+            if (shouldJump && _allowDoubleJump && _doubleJumpReady)
+            {
+                _doubleJumpReady = false;
+                // kill previous momentum before applying new jump
+                _rb.velocity = new Vector3(_rb.velocity.x, 0, _rb.velocity.x);
+                _rb.AddForce(Vector3.up * _doubleJumpForce);
+                Jumped.Invoke();
+            }
         }
         // reset it to false, so that we can receive a new jump command
         _jumpThisFrame = false;
@@ -204,7 +221,7 @@ public class CharacterMotor : MonoBehaviour
         bool previouslyGrounded = IsGrounded;
         // offset the ray slightly from the floor
         Vector3 startLocation = new Vector3(transform.position.x, transform.position.y + .1f, transform.position.z);
-        Debug.DrawRay(transform.position, startLocation * .3f);
+        Debug.DrawRay(startLocation, Vector3.down * .2f);
         if(Physics.Raycast(startLocation, Vector3.down, .2f + .1f, _groundTestLayers))
         {
             // we are touching ground
@@ -213,11 +230,18 @@ public class CharacterMotor : MonoBehaviour
             if (IsFalling)
             {
                 Landed.Invoke();
+                // reset our jump!
+                _doubleJumpReady = true;
             }
         }
         else
         {
             IsGrounded = false;
         }
+    }
+
+    void OnCollisionEnter(Collision collider)
+    {
+
     }
 }
