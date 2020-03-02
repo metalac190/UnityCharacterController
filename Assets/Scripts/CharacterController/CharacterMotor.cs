@@ -68,7 +68,7 @@ public class CharacterMotor : MonoBehaviour
 
     Rigidbody _rb;
 
-    Vector2 _movement;
+    Vector2 _movement = Vector2.zero;
     Vector3 _newMovementThisFrame = Vector3.zero;
     Quaternion _rotationThisFrame;
 

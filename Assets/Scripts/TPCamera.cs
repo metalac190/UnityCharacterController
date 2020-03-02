@@ -3,7 +3,7 @@
 public class TPCamera : MonoBehaviour
 {
     [Header("Target Settings")]
-    [SerializeField] Transform _target;
+    [SerializeField] Transform _target = null;
     [SerializeField] Vector3 _lookAtOffset = new Vector3(0, 1, 0);
     [SerializeField] float _currentDistance = 8;
     

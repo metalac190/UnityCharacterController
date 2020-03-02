@@ -5,64 +5,65 @@ using UnityEngine;
 [RequireComponent(typeof(CharacterMotor))]
 public class ThirdPersonController : MonoBehaviour, IPawn
 {
-    Vector2 _input;
-    Vector3 _currentDirection;
-    Quaternion _targetRotation;
-    Rigidbody _rb;
     CharacterMotor _characterMotor;
-
-    [SerializeField] Transform _camera;
-
+    // references while Controlled
+    PlayerController _controller;
+    PlayerInput _input;
+    Camera _camera;
 
     void Awake()
     {
         _characterMotor = GetComponent<CharacterMotor>();
     }
 
-    void FixedUpdate()
+    // if controlled, hook into input
+    public void OnControlled(PlayerController controller, PlayerInput input, Camera camera)
     {
-        _input.x = Input.GetAxisRaw("Horizontal");
-        _input.y = Input.GetAxisRaw("Vertical");
-
-        // if we don't have input, don't send it
-        if(_input.x == 0 && _input.y == 0)
-        {
-            return;
-        }
-        //Debug.Log("Input: " + _input.x + " " + _input.y);
-        // we need to convert our input into our intended direction.
-        // in this case, we want to move relative to the camera, 
-        Vector3 moveDirection = GetTargetDirection();
-
-        _characterMotor.Move(moveDirection);
-        _characterMotor.Rotate(moveDirection);
-    }
-
-    void Update()
-    {
-        if (Input.GetKeyDown(KeyCode.Space))
-        {
-            _characterMotor.Jump();
-        }
-    }
-
-    private Vector3 GetTargetDirection()
-    {
-        Vector3 horizontalMovement = _camera.transform.right * _input.x;
-        Vector3 forwardMovement = _camera.transform.forward * _input.y;
-        // get a combined direction with normalized length
-        Vector3 moveDirection = (horizontalMovement + forwardMovement).normalized;
-        moveDirection.y = 0;
-        return moveDirection;
-    }
-
-    public void OnControlled(PlayerInput input)
-    {
+        _controller = controller;
+        _input = input;
+        _camera = camera;
         // hook into inputs
+        input.MoveInput += OnMoveInput;
+        input.Jump += OnJump;
     }
 
-    public void OnReleased(PlayerInput input)
+    // if released, forget input
+    public void OnReleased(PlayerController controller, PlayerInput input, Camera camera)
     {
-        // hook into inputs
+        // unhook from inputs
+        _input.MoveInput -= OnMoveInput;
+        _input.Jump -= OnJump;
+        // clean up
+        _controller = null;
+        _input = null;
+        _camera = null;
+    }
+
+    // if this gameObject is disabled, release it justin case
+    void OnDisable()
+    {
+        if(_controller != null)
+        {
+            OnReleased(_controller, _input, _camera);
+        }
+    }
+
+    void OnMoveInput(Vector2 movement)
+    {
+        // convert input into 3D direction
+        Vector3 absoluteMovement = new Vector3(movement.x, 0, movement.y);
+        // convert direction to be relative to camera orientation
+        Vector3 localMovement = InputHelper.
+            ConvertDirectionToCameraLocal(absoluteMovement, _camera);
+        // ensure y in unaffected by conversion
+        localMovement.y = 0;
+
+        _characterMotor.Move(localMovement);
+        _characterMotor.Rotate(localMovement);
+    }
+
+    void OnJump()
+    {
+        _characterMotor.Jump();
     }
 }

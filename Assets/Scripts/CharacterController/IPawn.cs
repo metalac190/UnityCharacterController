@@ -4,6 +4,6 @@ using UnityEngine;
 
 public interface IPawn
 {
-    void OnControlled(PlayerInput input);
-    void OnReleased(PlayerInput input);
+    void OnControlled(PlayerController controller, PlayerInput input, Camera camera);
+    void OnReleased(PlayerController controller, PlayerInput input, Camera camera);
 }
