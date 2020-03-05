@@ -64,7 +64,7 @@ public class CharacterAnimator : MonoBehaviour
         //_animator.ResetTrigger(FallParam);
 
         //_animator.SetTrigger(LandParam);
-        SetTriggerQuick(LandParam);
+        SetBoolQuick(LandParam);
         Debug.Log("Landed!");
     }
 
@@ -74,7 +74,7 @@ public class CharacterAnimator : MonoBehaviour
         //_animator.ResetTrigger(FallParam);
 
         //_animator.SetTrigger(JumpParam);
-        SetTriggerQuick(JumpParam);
+        SetBoolQuick(JumpParam);
         Debug.Log("Jumped!");
     }
 
@@ -84,20 +84,20 @@ public class CharacterAnimator : MonoBehaviour
         //_animator.ResetTrigger(JumpParam);
 
         //_animator.SetTrigger(FallParam);
-        SetTriggerQuick(FallParam);
+        SetBoolQuick(FallParam);
         Debug.Log("Started Falling!");
     }
 
     // wrote this because Mecanim SetTrigger is the worst
-    void SetTriggerQuick(string triggerName)
+    void SetBoolQuick(string boolName)
     {
-        _triggerTimer = StartCoroutine(SetTriggerQuickRoutine(triggerName));
+        _triggerTimer = StartCoroutine(SetBoolQuickRoutine(boolName));
     }
 
-    IEnumerator SetTriggerQuickRoutine(string triggerName)
+    IEnumerator SetBoolQuickRoutine(string boolName)
     {
-        _animator.SetTrigger(triggerName);
+        _animator.SetBool(boolName, true);
         yield return null;
-        _animator.ResetTrigger(triggerName);
+        _animator.SetBool(boolName, false);
     }
 }

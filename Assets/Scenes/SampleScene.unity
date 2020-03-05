@@ -1221,7 +1221,7 @@ GameObject:
   - component: {fileID: 986903884}
   - component: {fileID: 986903883}
   m_Layer: 0
-  m_Name: Player
+  m_Name: PlayerController
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1240,7 +1240,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _playerCamera: {fileID: 963194227}
-  _startingPawn: {fileID: 891182640}
+  _startingPawn: {fileID: 891182641}
 --- !u!114 &986903884
 MonoBehaviour:
   m_ObjectHideFlags: 0
