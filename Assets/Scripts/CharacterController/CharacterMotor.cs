@@ -23,7 +23,7 @@ public class CharacterMotor : MonoBehaviour
     [SerializeField] float _turnSpeed = .15f;
 
     [Header("Jumping")]
-    [SerializeField] float _jumpForce = 300;
+    [SerializeField] float _jumpHeight = 3;
     [SerializeField] bool _allowDoubleJump = true;
     [SerializeField] float _doubleJumpForce = 150;
     [SerializeField] LayerMask _groundTestLayers = -1;  // default to 'everything'
@@ -96,7 +96,7 @@ public class CharacterMotor : MonoBehaviour
         // Check if we just landed!
         
         ApplyAcceleration();
-
+        // apply sliding
         if(_newMovementThisFrame != Vector3.zero)
         {
             ApplyMovement(_newMovementThisFrame);
@@ -177,7 +177,8 @@ public class CharacterMotor : MonoBehaviour
         // if we're on the ground, allow a jump
         if (IsGrounded && shouldJump == true)
         {
-            _rb.AddForce(Vector3.up * _jumpForce);
+            _rb.AddForce(Vector3.up * Mathf.Sqrt(_jumpHeight * -2f 
+                * Physics.gravity.y), ForceMode.VelocityChange);
             Jumped.Invoke();
         }
         // if we're in the air, capable of double jump, and have received jump command, allow double jump
@@ -188,7 +189,8 @@ public class CharacterMotor : MonoBehaviour
                 _doubleJumpReady = false;
                 // kill previous momentum before applying new jump
                 _rb.velocity = new Vector3(_rb.velocity.x, 0, _rb.velocity.x);
-                _rb.AddForce(Vector3.up * _doubleJumpForce);
+                _rb.AddForce(Vector3.up * Mathf.Sqrt(_doubleJumpForce * -2f
+                    * Physics.gravity.y), ForceMode.VelocityChange);
                 Jumped.Invoke();
             }
         }
@@ -238,10 +240,5 @@ public class CharacterMotor : MonoBehaviour
         {
             IsGrounded = false;
         }
-    }
-
-    void OnCollisionEnter(Collision collider)
-    {
-
     }
 }

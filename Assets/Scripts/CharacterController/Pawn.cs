@@ -7,18 +7,22 @@ using UnityEngine;
 /// </summary>
 public abstract class Pawn : MonoBehaviour
 {
-    public abstract void OnControlled(PlayerInput player, Camera camera);
+    public abstract void OnControlled();
     public abstract void OnReleased();
     // references while Controlled
     protected PlayerController Controller;
+    protected PlayerInput Input;
+    protected Camera Camera;
 
     // if controlled, hook into input
     public virtual void Control(PlayerController controller, PlayerInput input, Camera camera)
     {
         Controller = controller;
+        Input = input;
+        Camera = camera;
 
         // send it to the derived class
-        OnControlled(input, camera);
+        OnControlled();
     }
 
     // if released, forget input.
@@ -27,6 +31,8 @@ public abstract class Pawn : MonoBehaviour
         OnReleased();
         // clean up
         Controller = null;
+        Input = null;
+        Camera = null;
     }
 
     // if this gameObject is disabled, release it justin case
