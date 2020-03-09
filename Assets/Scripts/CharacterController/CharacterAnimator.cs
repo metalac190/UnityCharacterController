@@ -47,8 +47,8 @@ public class CharacterAnimator : MonoBehaviour
     void OnMovementChanged(Vector2 movement)
     {
         //TODO remove and replace with ACTUAL vector2 movement later
-        _animator.SetFloat(XInputParam, _motor.CurrentSpeedNormalized);
-        _animator.SetFloat(YInputParam, _motor.CurrentSpeedNormalized);
+        _animator.SetFloat(XInputParam, _motor.CurrentMomentumRatio);
+        _animator.SetFloat(YInputParam, _motor.CurrentMomentumRatio);
         //Debug.Log(movement);
     }
 

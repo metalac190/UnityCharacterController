@@ -10,7 +10,7 @@ using System;
 public class CharacterMotor : MonoBehaviour
 {
     [Header("Movement")]
-    [SerializeField] float _maxSpeed = .15f;
+    [SerializeField] float _maxSpeed = 5f;
     public float MaxSpeed
     {
         get => _maxSpeed;
@@ -49,7 +49,8 @@ public class CharacterMotor : MonoBehaviour
             _currentSpeed = value;
         }
     }
-    public float CurrentSpeedNormalized
+    // returns our current speed as a fraction of the max
+    public float CurrentMomentumRatio
     {
         get => (1 / MaxSpeed) * _currentSpeed;
     }
@@ -72,6 +73,8 @@ public class CharacterMotor : MonoBehaviour
     Vector3 _newMovementThisFrame = Vector3.zero;
     Quaternion _rotationThisFrame;
 
+    Vector3 _knockBack = Vector3.zero;
+
     bool _doubleJumpReady = true;
     bool _jumpThisFrame = false;
 
@@ -88,34 +91,25 @@ public class CharacterMotor : MonoBehaviour
         _groundTestLayers = ~(1 << _playerLayer);
     }
 
+    private void Update()
+    {
+        if (Input.GetKeyDown(KeyCode.F))
+        {
+            KnockBack(transform.forward, 2000);
+        }
+    }
+
     private void FixedUpdate()
     {
+        // calculate
         CheckIfGrounded();
         CheckIfFalling();
-
-        // Check if we just landed!
-        
-        ApplyAcceleration();
-        // apply sliding
-        if(_newMovementThisFrame != Vector3.zero)
-        {
-            ApplyMovement(_newMovementThisFrame);
-            //TODO add to Vector
-        }
-        else
-        {
-            ApplyMovement(transform.forward);
-            //TODO subtract from Vector
-        }
-
-        ApplyRotation(_rotationThisFrame);
-
+        CalculateMomentum();
+        // apply
         ApplyJump(_jumpThisFrame);
-
-        _newMovementThisFrame = Vector3.zero;
-
-        //TODO actually call this when something moved, not every fixedUpdate
-        MovementChanged.Invoke(_movement);
+        ApplyMovement(_newMovementThisFrame);
+        ApplyRotation(_rotationThisFrame);
+        ApplyKnockBack(_knockBack);
     }
     #endregion
 
@@ -138,18 +132,19 @@ public class CharacterMotor : MonoBehaviour
 
     public void KnockBack(Vector3 direction, float strength)
     {
-        _rb.AddForce(direction * strength);
-        KnockedBack.Invoke();
+        _knockBack = direction * strength;
     }
     #endregion
 
 
-    private void ApplyAcceleration()
+    private void CalculateMomentum()
     {
+        // if we're currently trying to move, accelerate
         if (_newMovementThisFrame != Vector3.zero)
         {
             CurrentSpeed += AccelRatePerSecond * Time.fixedDeltaTime;
         }
+        // if there's no movement command, deaccelerate
         else
         {
             CurrentSpeed -= DecelRatePerSecond * Time.fixedDeltaTime;
@@ -158,10 +153,26 @@ public class CharacterMotor : MonoBehaviour
         CurrentSpeed = Mathf.Clamp(CurrentSpeed, 0, _maxSpeed);
     }
 
-    void ApplyMovement(Vector3 movementThisFrame)
+    void ApplyMovement(Vector3 newMovement)
     {
-        movementThisFrame *= CurrentSpeed;
-        _rb.MovePosition(_rb.position + movementThisFrame);
+        // if we don't have a movement request, apply momentum
+        // in forward direction instead
+        if (newMovement == Vector3.zero)
+        {
+            newMovement = transform.forward;
+        }
+
+        // direction * current speed (calculated previously)
+        newMovement = newMovement * CurrentSpeed;
+        // retain gravity from rigidbody, so we can still fall/jump
+        newMovement.y = _rb.velocity.y;
+        // FINALLY apply movement
+        _rb.velocity = newMovement;
+
+        // clear out our movement
+        _newMovementThisFrame = Vector3.zero;
+        //TODO actually call this when something moved, not every fixedUpdate
+        MovementChanged.Invoke(_movement);
     }
 
     void ApplyRotation(Quaternion rotationThisFrame)
@@ -181,7 +192,8 @@ public class CharacterMotor : MonoBehaviour
                 * Physics.gravity.y), ForceMode.VelocityChange);
             Jumped.Invoke();
         }
-        // if we're in the air, capable of double jump, and have received jump command, allow double jump
+        // if we're in the air, capable of double jump, 
+        // and have received jump command, allow double jump
         else
         {
             if (shouldJump && _allowDoubleJump && _doubleJumpReady)
@@ -198,18 +210,32 @@ public class CharacterMotor : MonoBehaviour
         _jumpThisFrame = false;
     }
 
+    void ApplyKnockBack(Vector3 knockBack)
+    {
+        // if there's knockback, apply it
+        if (_knockBack != Vector3.zero)
+        {
+            _rb.AddForce(knockBack);
+            KnockedBack.Invoke();
+            // clear it out for the next frame
+            _knockBack = Vector3.zero;
+        }
+    }
+
     void CheckIfFalling()
     {
         bool previouslyFalling = IsFalling;
         // if we have downward velocity and we're not grounded, then we're falling
         if(_rb.velocity.y < 0 && !IsGrounded)
         {
-            IsFalling = true;
+            // we're falling!
             // if we weren't falling before, but now we are, start falling state
             if (previouslyFalling == false)
             {
                 StartedFalling.Invoke();
             }
+
+            IsFalling = true;
         }
         else
         {
@@ -222,23 +248,30 @@ public class CharacterMotor : MonoBehaviour
         // store grounded before changing, so we can test for new grounded event
         bool previouslyGrounded = IsGrounded;
         // offset the ray slightly from the floor
-        Vector3 startLocation = new Vector3(transform.position.x, transform.position.y + .1f, transform.position.z);
+        Vector3 startLocation = new Vector3(transform.position.x, 
+            transform.position.y + .1f, transform.position.z);
         Debug.DrawRay(startLocation, Vector3.down * .2f);
         if(Physics.Raycast(startLocation, Vector3.down, .2f + .1f, _groundTestLayers))
         {
-            // we are touching ground
             IsGrounded = true;
-            // if we were falling, but have recently grounded, we have landed!
-            if (IsFalling)
-            {
-                Landed.Invoke();
-                // reset our jump!
-                _doubleJumpReady = true;
-            }
+            // check if we JUST touched the ground
+            CheckIfLanded();
         }
         else
         {
+            // not grounded yet
             IsGrounded = false;
+        }
+    }
+
+    private void CheckIfLanded()
+    {
+        // if we were falling, but have recently grounded, we have landed!
+        if (IsFalling && IsGrounded)
+        {
+            Landed.Invoke();
+            // reset our jump!
+            _doubleJumpReady = true;
         }
     }
 }

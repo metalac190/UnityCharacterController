@@ -1255,10 +1255,20 @@ PrefabInstance:
       propertyPath: _jumpHeight
       value: 3
       objectReference: {fileID: 0}
+    - target: {fileID: 1610265295635425996, guid: 59de30e7f03589f4c8c29bbf06565e53,
+        type: 3}
+      propertyPath: _maxSpeed
+      value: 5
+      objectReference: {fileID: 0}
     - target: {fileID: 1610265295635425997, guid: 59de30e7f03589f4c8c29bbf06565e53,
         type: 3}
       propertyPath: m_CollisionDetection
-      value: 1
+      value: 3
+      objectReference: {fileID: 0}
+    - target: {fileID: 1610265295635425997, guid: 59de30e7f03589f4c8c29bbf06565e53,
+        type: 3}
+      propertyPath: m_IsKinematic
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 5990485761325223347, guid: 59de30e7f03589f4c8c29bbf06565e53,
         type: 3}
