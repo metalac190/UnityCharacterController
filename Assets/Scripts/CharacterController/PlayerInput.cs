@@ -9,6 +9,8 @@ public class PlayerInput : MonoBehaviour
     public event Action<Vector2> RotateInput = delegate { };
 
     public event Action Jump = delegate { };
+    public event Action Jumping = delegate { };
+
     public event Action PrimaryAction = delegate { };
     public event Action SecondaryAction = delegate { };
 
@@ -40,8 +42,11 @@ public class PlayerInput : MonoBehaviour
     {
         if (Input.GetKeyDown(KeyCode.Space))
         {
-            Debug.Log("Space!");
             Jump?.Invoke();
+        }
+        if (Input.GetKey(KeyCode.Space))
+        {
+            Jumping?.Invoke();
         }
         if (Input.GetKeyDown(KeyCode.Escape))
         {

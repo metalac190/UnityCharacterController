@@ -69,12 +69,11 @@ public class CharacterMotor : MonoBehaviour
 
     Rigidbody _rb;
 
-    Vector2 _movement = Vector2.zero;
-    Vector3 _newMovementThisFrame = Vector3.zero;
-    Quaternion _rotationThisFrame;
+    // movement
+    Vector3 _requestedMovementThisFrame = Vector3.zero;
+    Quaternion _requestedRotationThisFrame;
 
-    Vector3 _knockBack = Vector3.zero;
-
+    // state booleans
     bool _doubleJumpReady = true;
     bool _jumpThisFrame = false;
 
@@ -95,52 +94,47 @@ public class CharacterMotor : MonoBehaviour
     {
         if (Input.GetKeyDown(KeyCode.F))
         {
-            KnockBack(transform.forward, 2000);
+            _rb.AddForce(transform.forward * 300);
         }
     }
 
     private void FixedUpdate()
     {
-        // calculate
+        // state checks
         CheckIfGrounded();
         CheckIfFalling();
+        // calculate
         CalculateMomentum();
         // apply
         ApplyJump(_jumpThisFrame);
-        ApplyMovement(_newMovementThisFrame);
-        ApplyRotation(_rotationThisFrame);
-        ApplyKnockBack(_knockBack);
+        ApplyMovement(_requestedMovementThisFrame);
+        ApplyRotation(_requestedRotationThisFrame);
     }
     #endregion
 
     #region Public
     public void Move(Vector3 moveDirection)
     {
-        //Debug.Log("Move Direction: " + moveDirection);
-        _newMovementThisFrame = moveDirection;
+        _requestedMovementThisFrame = moveDirection;
     }
 
     public void Rotate(Vector3 moveDirection)
     {       
-        _rotationThisFrame = Quaternion.LookRotation(moveDirection);
+        _requestedRotationThisFrame = Quaternion.LookRotation(moveDirection);
     }
 
     public void Jump()
     {
         _jumpThisFrame = true;
     }
-
-    public void KnockBack(Vector3 direction, float strength)
-    {
-        _knockBack = direction * strength;
-    }
     #endregion
 
-
+    #region Private Methods
+    
     private void CalculateMomentum()
     {
         // if we're currently trying to move, accelerate
-        if (_newMovementThisFrame != Vector3.zero)
+        if (_requestedMovementThisFrame != Vector3.zero)
         {
             CurrentSpeed += AccelRatePerSecond * Time.fixedDeltaTime;
         }
@@ -151,28 +145,30 @@ public class CharacterMotor : MonoBehaviour
         }
         // don't go over the max speed
         CurrentSpeed = Mathf.Clamp(CurrentSpeed, 0, _maxSpeed);
+        //float speedRatio = Mathf.Lerp(0, _maxSpeed, (1 / MaxSpeed) * _currentSpeed);
+        Debug.Log("CurrentSpeed: " + CurrentSpeed);
     }
 
     void ApplyMovement(Vector3 newMovement)
     {
-        // if we don't have a movement request, apply momentum
-        // in forward direction instead
-        if (newMovement == Vector3.zero)
+        // make sure we only allow more velocity, if we haven't hit max speed
+        if (newMovement != Vector3.zero)
         {
-            newMovement = transform.forward;
+            newMovement = newMovement * CurrentMomentumRatio;
         }
-
-        // direction * current speed (calculated previously)
-        newMovement = newMovement * CurrentSpeed;
-        // retain gravity from rigidbody, so we can still fall/jump
-        newMovement.y = _rb.velocity.y;
+        else
+        {
+            newMovement = newMovement * -CurrentMomentumRatio;
+        }
+        Debug.Log("New Movement: " + newMovement);
         // FINALLY apply movement
-        _rb.velocity = newMovement;
-
-        // clear out our movement
-        _newMovementThisFrame = Vector3.zero;
+        _rb.velocity += newMovement;
+        Debug.Log("Current Velocity: " + _rb.velocity);
         //TODO actually call this when something moved, not every fixedUpdate
-        MovementChanged.Invoke(_movement);
+        MovementChanged.Invoke(newMovement);
+        // clear out our movement
+        _requestedMovementThisFrame = Vector3.zero;
+
     }
 
     void ApplyRotation(Quaternion rotationThisFrame)
@@ -208,18 +204,6 @@ public class CharacterMotor : MonoBehaviour
         }
         // reset it to false, so that we can receive a new jump command
         _jumpThisFrame = false;
-    }
-
-    void ApplyKnockBack(Vector3 knockBack)
-    {
-        // if there's knockback, apply it
-        if (_knockBack != Vector3.zero)
-        {
-            _rb.AddForce(knockBack);
-            KnockedBack.Invoke();
-            // clear it out for the next frame
-            _knockBack = Vector3.zero;
-        }
     }
 
     void CheckIfFalling()
@@ -274,4 +258,5 @@ public class CharacterMotor : MonoBehaviour
             _doubleJumpReady = true;
         }
     }
+    #endregion
 }

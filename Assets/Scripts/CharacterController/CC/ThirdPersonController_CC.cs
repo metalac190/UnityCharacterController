@@ -16,6 +16,7 @@ public class ThirdPersonController_CC : Pawn
     {
         Input.MoveInput += OnMoveInput;
         Input.Jump += OnJump;
+        Input.Jumping += OnJumping;
     }
 
     public override void OnReleased()
@@ -23,6 +24,7 @@ public class ThirdPersonController_CC : Pawn
         // inputs unsubscribe
         Input.MoveInput -= OnMoveInput;
         Input.Jump -= OnJump;
+        Input.Jumping -= OnJumping;
     }
 
     void OnMoveInput(Vector2 movement)
@@ -35,9 +37,9 @@ public class ThirdPersonController_CC : Pawn
         localMovement.y = 0;
 
         // move
-        _motor.Move(localMovement);
+        _motor.RequestMove(localMovement);
         // rotate
-
+        _motor.RequestTurn(localMovement);
 
 
         /*
@@ -56,7 +58,11 @@ public class ThirdPersonController_CC : Pawn
 
     void OnJump()
     {
-        _motor.Jump();
-        //_characterMotor.Jump();
+        _motor.RequestJump();
+    }
+
+    void OnJumping()
+    {
+        _motor.RequestJumpContinuous();
     }
 }
