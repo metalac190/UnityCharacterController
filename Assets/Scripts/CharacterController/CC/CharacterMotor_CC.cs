@@ -7,52 +7,87 @@ using System;
 public class CharacterMotor_CC : MonoBehaviour
 {
     // event hookups
+    public event Action<float> SpeedChanged = delegate { };
+    public event Action StoppedMoving = delegate { };
+    public event Action StartedMoving = delegate { };
     public event Action JumpStarted = delegate { };
     public event Action DoubleJumpStarted = delegate { };
     public event Action FallStarted = delegate { };
     public event Action Landed = delegate { };
 
-    [Header("Movement")]
+    [Header("[ Movement ]")]
     [SerializeField] float _maxSpeed = 5f;
     [SerializeField] float _turnSpeed = 7f;
-    
-    [Header("Jumping")]
+    [SerializeField] float _accelToMaxInSec = .5f;  // seconds to hit max speed
+    [SerializeField] float _decelToMaxInSec = .3f;  // seconds to decay speed to 0
+    [SerializeField] float _airControlMultiplier = 1f;     // how much accel to allow in midair
+
+    [Header("[ Jumping ]")]
     [SerializeField] float _gravityStrength = -9.81f;
     [SerializeField] float _maxJumpHeight = 3;
-    [SerializeField] float _minJumpStrength = 3f;
+    [SerializeField] float _minJumpStrength = 2.5f;
     [SerializeField] float _continuousJumpStrength = .2f;
-    [SerializeField] float _jumpingInputDuration = .15f;
+    [SerializeField] float _jumpingInputDuration = .2f;
 
-    [Header("Double Jump")]
+    [Header("[ Double Jump ]")]
     [SerializeField] bool _isDoubleJumpAllowed = true;
-    [SerializeField] float _doubleJumpHeight = 2;
+    [SerializeField] float _doubleJumpHeight = 1.5f;
 
-    [Header ("Ground Detection")]
-    [SerializeField] Vector3 _groundBoxDimensions = new Vector3(1, .2f, 1);
-    [SerializeField] Vector3 _groundOffset;
+    [Header ("[ Ground Detection ]")]
+    [SerializeField] Vector3 _groundBoxDimensions = new Vector3(1, .1f, 1);
+    [SerializeField] Vector3 _groundOffset = new Vector3(0,0,0);
     [SerializeField] LayerMask _groundedLayers = -1;  // default to 'everything'
 
-    [Header("Miscellaneous")]
+    [Header("[ Miscellaneous ]")]
     [SerializeField] float _groundStickStrength = 1;    // strength that player sticks to ground on slopes
 
     public bool IsGrounded { get; private set; } = false;
     public bool IsFalling { get; private set; } = false;
 
-    float _accelerationMultiplier = .2f;
-    float _decelerationMultiplier = .2f;
-    float _currentAccelerationNormalized = 0;
+    float _currentSpeed = 0;
+    public float CurrentSpeed
+    {
+        get => _currentSpeed;
+        private set
+        {
+            // ensure we don't EVER exceed our max speed
+            value = Mathf.Clamp(value, 0, _maxSpeed);
+            // check if our speed has changed
+            if (value != _currentSpeed)
+            {
+                SpeedChanged?.Invoke(value);
+            }
+            // assign it
+            _currentSpeed = value;
+        }
+    }
+    public float CurrentMomentumRatio
+    {
+        get => (1 / _maxSpeed) * CurrentSpeed;
+    }
+    public float AccelRatePerSecond
+    {
+        get { return (_maxSpeed / _accelToMaxInSec) * Time.deltaTime; }
+    }
+    public float DecelRatePerSecond
+    {
+        get { return (_maxSpeed / _decelToMaxInSec) * Time.deltaTime; }
+    }
 
     bool _isRequestingJump = false;  // for starting a new jump
     bool _isRequestingJumpContinuous = false;    // for continuously requesting added jump force
     bool _isStartingJumpSequence = false; // for defining the 'start period' of a new jump
     bool _isDoubleJumpReady = true;   // whether or not we still have a jump stored
 
+    bool _isMoving = false;
+
     Coroutine _groundedCheckLock;
 
-    CharacterController _controller = null;
+    CharacterController _collider = null;
 
-    Vector3 _requestedMovementThisFrame;
+    Vector3 _requestedMovementThisFrame = Vector3.zero;
     Quaternion _requestedRotationThisFrame;
+    Vector3 _previousMoveInput = Vector3.zero;
 
     Vector3 _jumpForce = Vector3.zero;
     Vector3 _gravityForce = Vector3.zero;
@@ -68,19 +103,17 @@ public class CharacterMotor_CC : MonoBehaviour
 
     private void Awake()
     {
-        _controller = GetComponent<CharacterController>();
+        _collider = GetComponent<CharacterController>();
     }
 
     private void Update()
     {
         // create new movement vectors, calculate move requests, apply movement, clear requests
-        Vector3 newMovement = _requestedMovementThisFrame;
-        Quaternion newRotation = _requestedRotationThisFrame;
 
         //TODO new features still need to add
-        // apply move acceleration
         // moving platform
 
+        _isMoving = TestIfMoving();
         // only check for ground if we're not in the middle of our
         // jumping sequence. prevents isGrounded = true when leaving the ground
         if (_isStartingJumpSequence == false)
@@ -96,14 +129,24 @@ public class CharacterMotor_CC : MonoBehaviour
         CalculateGravity();
         CalculateGroundStick();
         ProcessJumpRequests();
-        // apply all of our forces into a single vector
+
+        // combine all of our forces into a single vector
+        Vector3 newMovement = _requestedMovementThisFrame;
+        Quaternion newRotation = _requestedRotationThisFrame;
+        newMovement = ApplyAccelDecel(newMovement);
         newMovement = ApplyForceBuildup(newMovement);
+        //Debug.Log("New Movement: " + newMovement);
 
+        // finally, move our player
         ApplyMovement(newMovement);
-        ApplyRotation(_requestedRotationThisFrame);
+        ApplyRotation(newRotation);
 
-        ClearMoveRequests();
+        
+        // store values for checking next frame
+        StorePreviousRequests();
+        ClearRequests();
     }
+
     #endregion
 
     #region Public Requests
@@ -112,7 +155,7 @@ public class CharacterMotor_CC : MonoBehaviour
     // request movement
     public void RequestMove(Vector3 motion)
     {
-        _requestedMovementThisFrame = motion * _maxSpeed;
+        _requestedMovementThisFrame = motion;
     }
 
     // request turn
@@ -137,8 +180,44 @@ public class CharacterMotor_CC : MonoBehaviour
     {
         _isRequestingJumpContinuous = true;
     }
+    #endregion
 
-    private void ClearMoveRequests()
+    #region Request Management
+    private bool TestIfMoving()
+    {
+        // if we have some kind of input, we're trying to move
+        if (_requestedMovementThisFrame != Vector3.zero)
+        {
+            // if we weren't moving before, but have new input, we just started moving!
+            if (!_isMoving)
+            {
+                Debug.Log("Started Moving");
+                StartedMoving?.Invoke();
+            }
+            return true;
+        }
+        // if we don't have input this frame, we're not actively trying to move
+        else
+        {
+            // if we were moving before, but now don't have input, we just stopped
+            if (_isMoving)
+            {
+                Debug.Log("Stopped Moving");
+                StoppedMoving?.Invoke();
+            }
+            return false;
+        }
+    }
+
+    private void StorePreviousRequests()
+    {
+        if (_requestedMovementThisFrame != Vector3.zero)
+        {
+            _previousMoveInput = _requestedMovementThisFrame;
+        }
+    }
+
+    private void ClearRequests()
     {
         _requestedMovementThisFrame = Vector3.zero;
         _isRequestingJump = false;
@@ -147,6 +226,43 @@ public class CharacterMotor_CC : MonoBehaviour
     #endregion
 
     #region Force Calculations
+    Vector3 ApplyAccelDecel(Vector3 newMovement)
+    {
+        // if we're in the air and moving, allow instant velocity change
+        if (!IsGrounded && _requestedMovementThisFrame != Vector3.zero)
+        {
+            //Debug.Log("Air / Accel");
+            CurrentSpeed += AccelRatePerSecond * _airControlMultiplier;
+            newMovement *= CurrentSpeed;
+        }
+        // if we're in the air and not moving, kill forward speed
+        else if(!IsGrounded && _requestedMovementThisFrame == Vector3.zero)
+        {
+            //Debug.Log("Air / Decel");
+            CurrentSpeed -= DecelRatePerSecond * _airControlMultiplier;
+            newMovement = _previousMoveInput * CurrentSpeed;
+        }
+        // if we're grounded and currently trying to move, accelerate
+        else if (IsGrounded && _requestedMovementThisFrame != Vector3.zero)
+        {
+            //Debug.Log("Ground / Accel");
+            CurrentSpeed += AccelRatePerSecond;
+            newMovement *= CurrentSpeed;
+        }
+        // if we're grounded and no move input, decelerate
+        else if(IsGrounded && _requestedMovementThisFrame == Vector3.zero)
+        {
+            //Debug.Log("Ground / Decel");
+            CurrentSpeed -= DecelRatePerSecond;
+            // if there's no input, decelerate in previous input direction
+            newMovement = _previousMoveInput * CurrentSpeed;
+        }
+
+        //Debug.Log("Ratio: " + CurrentMomentumRatio);
+        //Debug.Log("Current speed: " + _currentSpeed);
+        return newMovement;
+    }
+
     // take in a force, apply changes, return force
     private Vector3 ApplyForceBuildup(Vector3 newMovement)
     {
@@ -186,6 +302,8 @@ public class CharacterMotor_CC : MonoBehaviour
             _groundStickForce.y = 0;
         }
     }
+
+
     #endregion
 
     #region Jumping
@@ -194,7 +312,6 @@ public class CharacterMotor_CC : MonoBehaviour
         // if jump requirements are valid
         if (IsGrounded && _isRequestingJump)
         {
-            Debug.Log("Jump!");
             StartNewJump();
         }
         // if we're in our jump sequence, and holding the jump button
@@ -220,6 +337,7 @@ public class CharacterMotor_CC : MonoBehaviour
 
     private void StartNewJump()
     {
+        Debug.Log("Jump!");
         // start a timer sequence to lock out grounding checks temporarily, 
         // while we get off the ground
         if (_groundedCheckLock != null)
@@ -237,13 +355,13 @@ public class CharacterMotor_CC : MonoBehaviour
 
     private void StartDoubleJump()
     {
-        // if our jump is expended and we request a new jump,
-        // see if we have our double jump available
         Debug.Log("Double Jump!");
+        // if our jump is expended and a new jump is valid,
+        // use our doublejump instead
         _isDoubleJumpReady = false;
-        // kill previous upwards momentum before applying new jump
+        // kill previous gravity buildup before applying new jump
         _gravityForce.y = 0;
-        // add a flat doubleJump force
+        // add a flat doubleJump force. Seems weird, but it's convention
         _jumpForce.y = Mathf.Sqrt(_doubleJumpHeight * -2 * _gravityStrength);
 
         DoubleJumpStarted.Invoke();
@@ -260,7 +378,7 @@ public class CharacterMotor_CC : MonoBehaviour
     #region Apply Movement
     void ApplyMovement(Vector3 movement)
     {
-        _controller.Move(movement * Time.deltaTime);
+        _collider.Move(movement * Time.deltaTime);
     }
 
     void ApplyRotation(Quaternion rotation)
@@ -318,8 +436,6 @@ public class CharacterMotor_CC : MonoBehaviour
             _isDoubleJumpReady = true;
         }
     }
-
-
     #endregion
 
     #region Debug

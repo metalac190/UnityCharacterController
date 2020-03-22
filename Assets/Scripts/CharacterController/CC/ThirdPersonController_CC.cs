@@ -29,6 +29,7 @@ public class ThirdPersonController_CC : Pawn
 
     void OnMoveInput(Vector2 movement)
     {
+        // convert 2D move input to 3D direction
         Vector3 absoluteMovement = new Vector3(movement.x, 0, movement.y);
         // convert direction to be relative to camera orientation
         Vector3 localMovement = InputHelper.
@@ -36,24 +37,9 @@ public class ThirdPersonController_CC : Pawn
         // ensure y in unaffected by conversion
         localMovement.y = 0;
 
-        // move
+        // request movements from the motor
         _motor.RequestMove(localMovement);
-        // rotate
         _motor.RequestTurn(localMovement);
-
-
-        /*
-        // convert input into 3D direction
-        Vector3 absoluteMovement = new Vector3(movement.x, 0, movement.y);
-        // convert direction to be relative to camera orientation
-        Vector3 localMovement = InputHelper.
-            ConvertDirectionToCameraLocal(absoluteMovement, _camera.transform);
-        // ensure y in unaffected by conversion
-        localMovement.y = 0;
-
-        //_characterMotor.Move(localMovement);
-        //_characterMotor.Rotate(localMovement);
-        */
     }
 
     void OnJump()

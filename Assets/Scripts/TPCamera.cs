@@ -39,7 +39,7 @@ public class TPCamera : MonoBehaviour
             {
                 // get Input
                 _currentX += Input.GetAxis("Mouse X") * _horizontalSpeed * _currentDistance * RotateModifier;
-                _currentY -= Input.GetAxis("Mouse Y") * _verticalSpeed * RotateModifier;
+                _currentY -= Input.GetAxis("Mouse Y") * _verticalSpeed * _currentDistance * RotateModifier;
             }
 
             _currentY = ClampAngle(_currentY, _yMinLimit, _yMaxLimit);

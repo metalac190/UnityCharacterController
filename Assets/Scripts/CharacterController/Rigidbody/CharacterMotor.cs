@@ -44,7 +44,7 @@ public class CharacterMotor : MonoBehaviour
         {
             if(value != _currentSpeed)
             {
-                SpeedChanged.Invoke(value);
+                SpeedChanged?.Invoke(value);
             }
             _currentSpeed = value;
         }
