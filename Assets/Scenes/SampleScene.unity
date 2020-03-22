@@ -692,7 +692,7 @@ GameObject:
   - component: {fileID: 872296350}
   - component: {fileID: 872296349}
   - component: {fileID: 872296348}
-  m_Layer: 0
+  m_Layer: 2
   m_Name: Cube (5)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -1075,6 +1075,11 @@ PrefabInstance:
         type: 3}
       propertyPath: _maxJumpHeight
       value: 3
+      objectReference: {fileID: 0}
+    - target: {fileID: 6846465658037952970, guid: 39e34139eb47c874fa34edfec7d7dad3,
+        type: 3}
+      propertyPath: _groundedLayers.m_Bits
+      value: 563
       objectReference: {fileID: 0}
     m_RemovedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 39e34139eb47c874fa34edfec7d7dad3, type: 3}

@@ -6,9 +6,10 @@ using System;
 [RequireComponent(typeof(CharacterController))]
 public class CharacterMotor_CC : MonoBehaviour
 {
-    public event Action JumpStart = delegate { };
-    public event Action DoubleJumpStart = delegate { };
-    public event Action FallStart = delegate { };
+    // event hookups
+    public event Action JumpStarted = delegate { };
+    public event Action DoubleJumpStarted = delegate { };
+    public event Action FallStarted = delegate { };
     public event Action Landed = delegate { };
 
     [Header("Movement")]
@@ -21,21 +22,30 @@ public class CharacterMotor_CC : MonoBehaviour
     [SerializeField] float _minJumpStrength = 3f;
     [SerializeField] float _continuousJumpStrength = .2f;
     [SerializeField] float _jumpingInputDuration = .15f;
+
+    [Header("Double Jump")]
+    [SerializeField] bool _isDoubleJumpAllowed = true;
+    [SerializeField] float _doubleJumpHeight = 2;
+
+    [Header ("Ground Detection")]
     [SerializeField] Vector3 _groundBoxDimensions = new Vector3(1, .2f, 1);
     [SerializeField] Vector3 _groundOffset;
     [SerializeField] LayerMask _groundedLayers = -1;  // default to 'everything'
 
-    [Header("Double Jump")]
-    [SerializeField] bool _allowDoubleJump = true;
-    [SerializeField] float _doubleJumpHeight = 2;
+    [Header("Miscellaneous")]
+    [SerializeField] float _groundStickStrength = 1;    // strength that player sticks to ground on slopes
 
-    bool _requestJump = false;  // for starting a new jump
-    bool _requestJumpContinuous = false;    // for continuous jump force
+    public bool IsGrounded { get; private set; } = false;
+    public bool IsFalling { get; private set; } = false;
 
-    bool _isGrounded = false;
-    bool _startingJumpSequence = false;
-    bool _isFalling = false;
-    bool _doubleJumpReady = true;
+    float _accelerationMultiplier = .2f;
+    float _decelerationMultiplier = .2f;
+    float _currentAccelerationNormalized = 0;
+
+    bool _isRequestingJump = false;  // for starting a new jump
+    bool _isRequestingJumpContinuous = false;    // for continuously requesting added jump force
+    bool _isStartingJumpSequence = false; // for defining the 'start period' of a new jump
+    bool _isDoubleJumpReady = true;   // whether or not we still have a jump stored
 
     Coroutine _groundedCheckLock;
 
@@ -47,8 +57,8 @@ public class CharacterMotor_CC : MonoBehaviour
     Vector3 _jumpForce = Vector3.zero;
     Vector3 _gravityForce = Vector3.zero;
     Vector3 _groundStickForce = Vector3.zero;
-    Vector3 _velocity = Vector3.zero;
 
+    #region Monobehaviour
     void Reset()
     {
         // disable player layer for default setup. 
@@ -63,8 +73,7 @@ public class CharacterMotor_CC : MonoBehaviour
 
     private void Update()
     {
-        // create new movement vectors, do calculations, apply movement
-        // once at the end of this Update frame
+        // create new movement vectors, calculate move requests, apply movement, clear requests
         Vector3 newMovement = _requestedMovementThisFrame;
         Quaternion newRotation = _requestedRotationThisFrame;
 
@@ -72,114 +81,33 @@ public class CharacterMotor_CC : MonoBehaviour
         // apply move acceleration
         // moving platform
 
-        // controller.isGrounded is unpredictable. Use our own
         // only check for ground if we're not in the middle of our
-        // jumping sequence
-        if(_startingJumpSequence == false)
-            _isGrounded = TestGrounded();
-        // check if we have landed. Do this between our ground and falling checks
-        CheckIfLanded();
+        // jumping sequence. prevents isGrounded = true when leaving the ground
+        if (_isStartingJumpSequence == false)
+        {
+            // controller.isGrounded is unpredictable. Use our own
+            IsGrounded = TestGrounded();
+        }
+        // check if we have landed between our ground and falling checks
+        TestIfLanded();
+        // we may want to know if we're falling, for animations and gravity reset
+        IsFalling = TestFalling();
 
-        _isFalling = TestFalling();
-
-        ApplyGravity();
-        ApplyGroundStick();
-        ApplyJump();
-
-        // apply our velocity to our movement this frame
-        newMovement += _jumpForce;
-        newMovement += _gravityForce;
-        newMovement += _groundStickForce;
-
-        //Debug.Log("New Movement: " + newMovement);
+        CalculateGravity();
+        CalculateGroundStick();
+        ProcessJumpRequests();
+        // apply all of our forces into a single vector
+        newMovement = ApplyForceBuildup(newMovement);
 
         ApplyMovement(newMovement);
         ApplyRotation(_requestedRotationThisFrame);
 
-        // clear out requests until next frame
-        _requestedMovementThisFrame = Vector3.zero;
-        _requestJump = false;
-        _requestJumpContinuous = false;
+        ClearMoveRequests();
     }
+    #endregion
 
-    private void ApplyGravity()
-    {
-        // if we're grounded we don't need to process gravity
-        if (_isGrounded)
-        {
-            //Debug.Log("Apply downward force to hug the ground");
-            _gravityForce.y = 0;
-        }
-        // otherwise we need to keep falling faster
-        else
-        {
-            //Debug.Log("Decrease gravity");
-            _gravityForce.y += _gravityStrength * Time.deltaTime;
-        }
-    }
-
-    void ApplyGroundStick()
-    {
-        // if we're grounded, apply a force so that we can stick to down slopes
-        if (_isGrounded)
-        {
-            _groundStickForce.y = _gravityStrength;
-        }
-        else
-        {
-            _groundStickForce.y = 0;
-        }
-    }
-
-    private void ApplyJump()
-    {
-        
-        // if jump requirements are valid
-        if (_isGrounded && _requestJump)
-        {
-            Debug.Log("Jump!");
-            // start a timer sequence to lock out grounding checks temporarily, 
-            // while we get off the ground
-            if (_groundedCheckLock != null)
-                StopCoroutine(_groundedCheckLock);
-            _groundedCheckLock = StartCoroutine
-                (GroundedCheckLockoutRoutine(_jumpingInputDuration));
-            _isGrounded = false;
-            // gravity jump Physics equation -> New upward velocity
-            //_velocity.y = Mathf.Sqrt(_maxJumpHeight * -2 * _gravity);
-            _jumpForce.y += _minJumpStrength;
-
-            JumpStart.Invoke();
-        }
-        // if we're in our jump sequence, continue detecting jump requests
-        else if (_startingJumpSequence && _requestJumpContinuous)
-        {
-            
-            _jumpForce.y += _continuousJumpStrength;
-        }
-        // if we're unable to jump
-        else if(_requestJump && _allowDoubleJump && _doubleJumpReady)
-        {
-            // if our jump is expended and we request a new jump,
-            // see if we have our double jump available
-            Debug.Log("Double Jump!");
-            _doubleJumpReady = false;
-            // kill previous upwards momentum before applying new jump
-            _gravityForce.y = 0;
-            // add a flat doubleJump force
-            _jumpForce.y = Mathf.Sqrt(_doubleJumpHeight * -2 * _gravityStrength);
-
-            DoubleJumpStart.Invoke();
-        }
-        // if we're grounded, null out jump force
-        else if(_isGrounded)
-        {
-            _jumpForce.y = 0;
-        }
-        // ensure we never exceed our max jump height
-        float maxJumpStrength = Mathf.Sqrt(_maxJumpHeight * -2 * _gravityStrength);
-        _jumpForce.y = Mathf.Clamp(_jumpForce.y, 0, maxJumpStrength);
-    }
+    #region Public Requests
+    // Other functions can request movement, but it does not guarantee movement
 
     // request movement
     public void RequestMove(Vector3 motion)
@@ -196,20 +124,140 @@ public class CharacterMotor_CC : MonoBehaviour
         _requestedRotationThisFrame.Normalize();
         // rotate towards our new direction, over time
         _requestedRotationThisFrame = Quaternion.Slerp
-            (transform.rotation, _requestedRotationThisFrame, 
+            (transform.rotation, _requestedRotationThisFrame,
             _turnSpeed * Time.deltaTime);
     }
 
     public void RequestJump()
     {
-        _requestJump = true;
+        _isRequestingJump = true;
     }
 
     public void RequestJumpContinuous()
     {
-        _requestJumpContinuous = true;
+        _isRequestingJumpContinuous = true;
     }
 
+    private void ClearMoveRequests()
+    {
+        _requestedMovementThisFrame = Vector3.zero;
+        _isRequestingJump = false;
+        _isRequestingJumpContinuous = false;
+    }
+    #endregion
+
+    #region Force Calculations
+    // take in a force, apply changes, return force
+    private Vector3 ApplyForceBuildup(Vector3 newMovement)
+    {
+        // accumulate forces and return the combined vector
+        newMovement += _jumpForce;
+        newMovement += _gravityForce;
+        newMovement += _groundStickForce;
+
+        return newMovement;
+    }
+
+    private void CalculateGravity()
+    {
+        // if we're grounded we don't need to process gravity
+        if (IsGrounded)
+        {
+            //Debug.Log("Apply downward force to hug the ground");
+            _gravityForce.y = 0;
+        }
+        // otherwise we need to keep falling faster
+        else
+        {
+            //Debug.Log("Decrease gravity");
+            _gravityForce.y += _gravityStrength * Time.deltaTime;
+        }
+    }
+
+    void CalculateGroundStick()
+    {
+        // if we're grounded, apply a force so that we can stick to down slopes
+        if (IsGrounded)
+        {
+            _groundStickForce.y = _gravityStrength * _groundStickStrength;
+        }
+        else
+        {
+            _groundStickForce.y = 0;
+        }
+    }
+    #endregion
+
+    #region Jumping
+    private void ProcessJumpRequests()
+    {
+        // if jump requirements are valid
+        if (IsGrounded && _isRequestingJump)
+        {
+            Debug.Log("Jump!");
+            StartNewJump();
+        }
+        // if we're in our jump sequence, and holding the jump button
+        // continue applying jump height
+        else if (_isStartingJumpSequence && _isRequestingJumpContinuous)
+        {
+            _jumpForce.y += _continuousJumpStrength;
+        }
+        // if we're unable to jump, but able to double jump, do that instead
+        else if (_isRequestingJump && _isDoubleJumpAllowed && _isDoubleJumpReady)
+        {
+            StartDoubleJump();
+        }
+        // if we're grounded, null out jump force
+        else if (IsGrounded)
+        {
+            _jumpForce.y = 0;
+        }
+        // ensure we never exceed our max jump height
+        float maxJumpStrength = Mathf.Sqrt(_maxJumpHeight * -2 * _gravityStrength);
+        _jumpForce.y = Mathf.Clamp(_jumpForce.y, 0, maxJumpStrength);
+    }
+
+    private void StartNewJump()
+    {
+        // start a timer sequence to lock out grounding checks temporarily, 
+        // while we get off the ground
+        if (_groundedCheckLock != null)
+            StopCoroutine(_groundedCheckLock);
+        _groundedCheckLock = StartCoroutine
+            (GroundedCheckLockoutRoutine(_jumpingInputDuration));
+
+        IsGrounded = false;
+        // gravity jump Physics equation -> New upward velocity
+        //_velocity.y = Mathf.Sqrt(_maxJumpHeight * -2 * _gravity);
+        _jumpForce.y += _minJumpStrength;
+
+        JumpStarted.Invoke();
+    }
+
+    private void StartDoubleJump()
+    {
+        // if our jump is expended and we request a new jump,
+        // see if we have our double jump available
+        Debug.Log("Double Jump!");
+        _isDoubleJumpReady = false;
+        // kill previous upwards momentum before applying new jump
+        _gravityForce.y = 0;
+        // add a flat doubleJump force
+        _jumpForce.y = Mathf.Sqrt(_doubleJumpHeight * -2 * _gravityStrength);
+
+        DoubleJumpStarted.Invoke();
+    }
+    // use this to temporarily suspend grounding checks
+    private IEnumerator GroundedCheckLockoutRoutine(float lockoutTime)
+    {
+        _isStartingJumpSequence = true;
+        yield return new WaitForSeconds(lockoutTime);
+        _isStartingJumpSequence = false;
+    }
+    #endregion
+
+    #region Apply Movement
     void ApplyMovement(Vector3 movement)
     {
         _controller.Move(movement * Time.deltaTime);
@@ -219,7 +267,9 @@ public class CharacterMotor_CC : MonoBehaviour
     {
         transform.rotation = rotation;
     }
+    #endregion
 
+    #region Tests
     bool TestGrounded()
     {
         // if we've found a valid ground collider, we're grounded!
@@ -237,18 +287,18 @@ public class CharacterMotor_CC : MonoBehaviour
 
     bool TestFalling()
     {
-        bool previouslyFalling = _isFalling;
+        bool previouslyFalling = IsFalling;
         // if our gravity has overtaken our jump velocity, we're now falling
         float fallSpeed = _gravityForce.y + _jumpForce.y;
         // if we have downward velocity and we're not grounded, then we're falling!
-        if(fallSpeed < 0 && !_isGrounded)
+        if(fallSpeed < 0 && !IsGrounded)
         {
             // currently falling
             // if we weren't falling before, but now we are, we STARTED falling
             if(previouslyFalling == false)
             {
                 Debug.Log("Start Falling");
-                FallStart.Invoke();
+                FallStarted.Invoke();
             }
             return true;
         }
@@ -258,28 +308,25 @@ public class CharacterMotor_CC : MonoBehaviour
         }
     }
 
-    void CheckIfLanded()
+    void TestIfLanded()
     {
-        if(_isGrounded && _isFalling)
+        if(IsGrounded && IsFalling)
         {
             Debug.Log("Landed!");
             Landed.Invoke();
             // reset our double jump
-            _doubleJumpReady = true;
+            _isDoubleJumpReady = true;
         }
     }
 
-    // use this to temporarily suspend grounding checks
-    private IEnumerator GroundedCheckLockoutRoutine(float lockoutTime)
-    {
-        _startingJumpSequence = true;
-        yield return new WaitForSeconds(lockoutTime);
-        _startingJumpSequence = false;
-    }
 
+    #endregion
+
+    #region Debug
     private void OnDrawGizmosSelected()
     {
         Gizmos.DrawWireCube(transform.position 
             + _groundOffset, _groundBoxDimensions / 2);
     }
+    #endregion
 }

@@ -92,6 +92,7 @@ public class CharacterMotor : MonoBehaviour
 
     private void Update()
     {
+        //TODO remove after testing complete
         if (Input.GetKeyDown(KeyCode.F))
         {
             _rb.AddForce(transform.forward * 300);
