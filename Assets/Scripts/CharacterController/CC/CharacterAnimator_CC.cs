@@ -6,12 +6,20 @@ using UnityEngine;
 [RequireComponent(typeof(CharacterMotor_CC))]
 public class CharacterAnimator_CC : MonoBehaviour
 {
+    [SerializeField] float _runningThreshold = .2f;
+
+    [Header("Blend Time")]
+    [SerializeField] float _stoppedMovingBlendTime = .2f;
+    [SerializeField] float _startedMovingBlendTime = .2f;
+    [SerializeField] float _landedBlendTime = .3f;
+    [SerializeField] float _jumpBlendTime = .2f;
+    [SerializeField] float _doubleJumpBlendTime = .2f;
+    [SerializeField] float _fallBlendTime = .2f;
+
     const string IdleState = "Idle";
     const string RunState = "Run";
     const string JumpState = "Jumping";
     const string FallState = "Falling";
-
-    bool _isRunning = false;
 
     CharacterMotor_CC _motor = null;
     Animator _animator = null;
@@ -44,50 +52,53 @@ public class CharacterAnimator_CC : MonoBehaviour
 
     private void Start()
     {
-        _animator.CrossFadeInFixedTime(IdleState, .2f);
+        _animator.CrossFadeInFixedTime(IdleState, 0);
     }
 
     void OnStoppedMoving()
     {
+        // if we're in the air, continue current aerial animations
         if (!_motor.IsGrounded)
             return;
 
-        _animator.CrossFadeInFixedTime(IdleState, .2f);
+        _animator.CrossFadeInFixedTime(IdleState, _stoppedMovingBlendTime);
     }
 
     void OnStartedMoving()
     {
-        // if we're in the air, don't change animations
+        // if we're in the air, continue current aerial animations
         if (!_motor.IsGrounded)
             return;
 
-        _animator.CrossFadeInFixedTime(RunState, .3f);
+        _animator.CrossFadeInFixedTime(RunState, _startedMovingBlendTime);
     }
 
     void OnLanded()
     {
-        if (_motor.CurrentMomentumRatio >= .2f)
+        // if moving, start running as soon as we land
+        if (_motor.CurrentMomentumRatio >= _runningThreshold)
         {
-            _animator.CrossFadeInFixedTime(RunState, .3f);
+            _animator.CrossFadeInFixedTime(RunState, _landedBlendTime);
         }
-        else if (_motor.CurrentMomentumRatio < .2f)
+        // if not moving, idle as soon as we land
+        else if (_motor.CurrentMomentumRatio < _runningThreshold)
         {
-            _animator.CrossFadeInFixedTime(IdleState, .3f);
+            _animator.CrossFadeInFixedTime(IdleState, _landedBlendTime);
         }
     }
 
     void OnJumpStarted()
     {
-        _animator.CrossFadeInFixedTime(JumpState, .2f);
+        _animator.CrossFadeInFixedTime(JumpState, _jumpBlendTime);
     }
 
     void OnDoubleJumpStarted()
     {
-        _animator.CrossFadeInFixedTime(JumpState, .2f);
+        _animator.CrossFadeInFixedTime(JumpState, _doubleJumpBlendTime);
     }
 
     void OnFallStarted()
     {
-        _animator.CrossFadeInFixedTime(FallState, .2f);
+        _animator.CrossFadeInFixedTime(FallState, _fallBlendTime);
     }
 }
